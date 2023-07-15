@@ -50,8 +50,12 @@ __FBSDID("$FreeBSD: head/sys/netinet/sctp_bsd_addr.c 358080 2020-02-18 19:41:55Z
 #include <netinet/sctp_asconf.h>
 #include <netinet/sctp_sysctl.h>
 #include <netinet/sctp_indata.h>
+#include <user_config.h>
 #if defined(__FreeBSD__) && !defined(__Userspace__)
 #include <sys/unistd.h>
+#endif
+#if defined(SCTP_USE_LWIP)
+#include <lwip/netif.h>
 #endif
 
 /* Declare all of our malloc named types */
@@ -125,7 +129,7 @@ static void
 sctp_iterator_thread(void *v SCTP_UNUSED)
 {
 #if defined(__Userspace__)
-	sctp_userspace_set_threadname("SCTP iterator");
+	sctp_userspace_set_threadname(SCTP_THREAD_ITERATOR_NAME);
 #endif
 	SCTP_IPI_ITERATOR_WQ_LOCK();
 	/* In FreeBSD this thread never terminates. */
@@ -163,6 +167,7 @@ sctp_iterator_thread(void *v SCTP_UNUSED)
 	SCTP_IPI_ITERATOR_WQ_UNLOCK();
 #if defined(__Userspace__)
 	sctp_wakeup_iterator();
+	pthread_exit(NULL);
 	return (NULL);
 #else
 	wakeup(&sctp_it_ctl.iterator_flags);
@@ -186,7 +191,7 @@ sctp_startup_iterator(void)
 	SCTP_IPI_ITERATOR_WQ_INIT();
 	TAILQ_INIT(&sctp_it_ctl.iteratorhead);
 #if defined(__Userspace__)
-	if (sctp_userspace_thread_create(&sctp_it_ctl.thread_proc, &sctp_iterator_thread)) {
+	if (sctp_userspace_thread_create(&sctp_it_ctl.thread_proc, &sctp_iterator_thread, SCTP_THREAD_ITERATOR_NAME, SCTP_THREAD_ITERATOR_SIZE)) {
 		SCTP_PRINTF("ERROR: Creating sctp_iterator_thread failed.\n");
 	} else {
 		SCTP_BASE_VAR(iterator_thread_started) = 1;
@@ -415,6 +420,80 @@ sctp_init_ifns_for_vrf(int vrfid)
 static void
 sctp_init_ifns_for_vrf(int vrfid)
 {
+#if defined(SCTP_USE_LWIP)
+	#define LWIP_IF_NUM_MAX 256
+
+	struct sctp_ifa *sctp_ifa;
+	uint32_t ifa_flags;
+	uint32_t if_num;
+	char if_name[NETIF_NAMESIZE];
+	struct sockaddr* in_addr = malloc(sizeof(struct sockaddr));
+
+	for(if_num=1;if_num<LWIP_IF_NUM_MAX; if_num++){
+		struct netif* tmp_if = netif_get_by_index(if_num);
+		char * tmp_name = netif_index_to_name(if_num, if_name);
+		memset(in_addr, 0, sizeof(struct sockaddr));
+		if(tmp_if != NULL){
+
+			if(ip_addr_isloopback(&tmp_if->ip_addr)){
+				continue;
+			}
+
+			if(tmp_if->ip_addr.type == IPADDR_TYPE_V4){
+				in_addr->sa_family = AF_INET;
+				memcpy(&((struct sockaddr_in *)in_addr)->sin_addr, &tmp_if->ip_addr.u_addr, sizeof(uint32_t) );
+			}else{
+				in_addr->sa_family = AF_INET6;
+				memcpy(&((struct sockaddr_in6 *)in_addr)->sin6_addr, &tmp_if->ip_addr.u_addr, sizeof(uint32_t)*4);
+			}
+#if !defined(INET)
+			if (in_addr->sa_family != AF_INET6) {
+				/* non inet6 skip */
+				continue;
+			}
+#elif !defined(INET6)
+			if (in_addr->sa_family != AF_INET) {
+				/* non inet skip */
+				continue;
+			}
+#else
+			if ((in_addr->sa_family != AF_INET) && (in_addr->sa_family != AF_INET6)) {
+				/* non inet/inet6 skip */
+				continue;
+			}
+#endif
+#if defined(INET6)
+			if ((in_addr->sa_family == AF_INET6) &&
+				IN6_IS_ADDR_UNSPECIFIED(&((struct sockaddr_in6 *)in_addr)->sin6_addr)) {
+				/* skip unspecifed addresses */
+				continue;
+			}
+#endif
+#if defined(INET)
+			if (in_addr->sa_family == AF_INET &&
+				((struct sockaddr_in *)in_addr)->sin_addr.s_addr == 0) {
+				continue;
+			}
+#endif
+			ifa_flags = 0;
+			sctp_ifa = sctp_add_addr_to_vrf(vrfid,
+											NULL,
+											if_num,
+											0,
+											tmp_name,
+											NULL,
+											(struct sockaddr*)in_addr,
+											ifa_flags,
+											0);
+			if (sctp_ifa) {
+				sctp_ifa->localifa_flags &= ~SCTP_ADDR_DEFER_USE;
+			}
+		}else{
+			break;
+		}
+	}
+	free(in_addr);
+#else
 #if defined(INET) || defined(INET6)
 	int rc;
 	struct ifaddrs *ifa, *ifas;
@@ -473,6 +552,7 @@ sctp_init_ifns_for_vrf(int vrfid)
 		}
 	}
 	freeifaddrs(ifas);
+#endif
 #endif
 }
 #endif

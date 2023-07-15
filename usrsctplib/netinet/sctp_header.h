@@ -581,14 +581,14 @@ struct sctp_auth_chunk {
 			   sizeof(struct sctphdr) + \
 			   sizeof(struct sctp_ecne_chunk) + \
 			   sizeof(struct sctp_sack_chunk) + \
-			   sizeof(struct ip))
+			   sizeof(STRUCT_IP_HDR))
 
 #define SCTP_MED_OVERHEAD (sizeof(struct sctp_data_chunk) + \
 			   sizeof(struct sctphdr) + \
-			   sizeof(struct ip))
+			   sizeof(STRUCT_IP_HDR))
 
 
-#define SCTP_MIN_OVERHEAD (sizeof(struct ip) + \
+#define SCTP_MIN_OVERHEAD (sizeof(STRUCT_IP_HDR) + \
 			   sizeof(struct sctphdr))
 
 #endif /* INET6 */
@@ -596,9 +596,9 @@ struct sctp_auth_chunk {
 
 #define SCTP_MED_V4_OVERHEAD (sizeof(struct sctp_data_chunk) + \
 			      sizeof(struct sctphdr) + \
-			      sizeof(struct ip))
+			      sizeof(STRUCT_IP_HDR))
 
-#define SCTP_MIN_V4_OVERHEAD (sizeof(struct ip) + \
+#define SCTP_MIN_V4_OVERHEAD (sizeof(STRUCT_IP_HDR) + \
 			      sizeof(struct sctphdr))
 
 #if defined(_WIN32) && !defined(__Userspace__)

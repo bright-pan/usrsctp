@@ -45,9 +45,22 @@ set(CMAKE_MACOSX_RPATH 		1)
 
 include(CheckCCompilerFlag)
 
+
+option(SCTP_USE_MBEDTLS_SHA1 "Build with mbedtls sha1 support." ON)
+
 add_definitions(-D__Userspace__)
 add_definitions(-DSCTP_SIMPLE_ALLOCATOR)
 add_definitions(-DSCTP_PROCESS_LEVEL_LOCKS)
+if(NOT sctp_use_lwip)
+	add_definitions(-D__native_client__)
+endif()
+
+if(SCTP_USE_MBEDTLS_SHA1)
+	add_definitions(-DSCTP_USE_MBEDTLS_SHA1)
+	if(NOT sctp_use_rtos)
+		find_package(MbedTLS REQUIRED)
+	endif()
+endif()
 
 
 #################################################
@@ -86,6 +99,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 list(APPEND usrsctp_root_headers
 	user_atomic.h
+	user_config.h
 	user_environment.h
 	user_inpcb.h
 	user_ip_icmp.h
@@ -110,6 +124,7 @@ list(APPEND usrsctp_netinet_headers
 	netinet/sctp_header.h
 	netinet/sctp_indata.h
 	netinet/sctp_input.h
+	netinet/sctp_ip_port.h
 	netinet/sctp_lock_userspace.h
 	netinet/sctp_os_userspace.h
 	netinet/sctp_os.h
@@ -121,6 +136,8 @@ list(APPEND usrsctp_netinet_headers
 	netinet/sctp_structs.h
 	netinet/sctp_sysctl.h
 	netinet/sctp_timer.h
+	netinet/sctp_udp_port.h
+	netinet/sctp_in_port.h
 	netinet/sctp_uio.h
 	netinet/sctp_var.h
 	netinet/sctputil.h
@@ -163,21 +180,29 @@ list(APPEND usrsctp_sources
 	user_socket.c
 )
 
-add_library(usrsctp SHARED ${usrsctp_sources} ${usrsctp_headers})
+#add_library(usrsctp STATIC ${usrsctp_sources} ${usrsctp_headers})
 add_library(usrsctp-static STATIC ${usrsctp_sources} ${usrsctp_headers})
 
-target_include_directories(usrsctp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+#target_include_directories(usrsctp PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_include_directories(usrsctp-static PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+
+if(SCTP_USE_MBEDTLS_SHA1)
+	target_include_directories(usrsctp-static PRIVATE ${MBEDTLS_INCLUDE_DIRS})
+endif()
 
 if (WIN32)
 	message(STATUS "link library: ws2_32")
-	target_link_libraries(usrsctp ws2_32 iphlpapi.lib)
+	#target_link_libraries(usrsctp ws2_32 iphlpapi.lib)
 	target_link_libraries(usrsctp-static ws2_32 iphlpapi.lib)
 endif ()
 
+if(SCTP_USE_MBEDTLS_SHA1)
+	target_link_libraries(usrsctp-static PRIVATE ${MBEDTLS_LIBRARIES})
+endif()
+
 set_target_properties(usrsctp-static PROPERTIES OUTPUT_NAME "usrsctp")
-set_target_properties(usrsctp PROPERTIES IMPORT_SUFFIX "_import.lib")
-set_target_properties(usrsctp PROPERTIES SOVERSION 1 VERSION 1.0.0)
+#set_target_properties(usrsctp PROPERTIES IMPORT_SUFFIX "_import.lib")
+#set_target_properties(usrsctp PROPERTIES SOVERSION 1 VERSION 1.0.0)
 
 if (NOT DEFINED CMAKE_INSTALL_LIBDIR)
 	SET(CMAKE_INSTALL_LIBDIR lib)
@@ -188,5 +213,5 @@ endif ()
 # INSTALL LIBRARY AND HEADER
 #################################################
 
-install(TARGETS usrsctp usrsctp-static DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install(TARGETS usrsctp-static DESTINATION ${CMAKE_INSTALL_LIBDIR})
 install(FILES usrsctp.h DESTINATION include)

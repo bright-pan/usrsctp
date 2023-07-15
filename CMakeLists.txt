@@ -38,6 +38,8 @@ if (NOT CMAKE_BUILD_TYPE)
 	set(CMAKE_BUILD_TYPE "DEBUG")
 endif ()
 
+list(APPEND CMAKE_MODULE_PATH ${CMAKE_CURRENT_SOURCE_DIR}/cmake)
+
 include(CheckStructHasMember)
 include(CheckIncludeFile)
 include(CheckIncludeFiles)
@@ -62,22 +64,34 @@ if (sctp_inet)
 	add_definitions(-DINET)
 endif ()
 
-option(sctp_inet6 "Support IPv6" 1)
+option(sctp_inet6 "Support IPv6" 0)
 if (sctp_inet6)
 	add_definitions(-DINET6)
 endif ()
 
-option(sctp_werror "Treat warning as error" 1)
+option(sctp_werror "Treat warning as error" 0)
 
 option(sctp_link_programs_static "Link example programs static" 0)
 
-option(sctp_build_programs "Build example programs" 1)
+option(sctp_build_programs "Build example programs" 0)
 
 option(sctp_sanitizer_address "Compile with address sanitizer" 0)
 
 option(sctp_sanitizer_memory "Compile with memory sanitizer" 0)
 
 option(sctp_build_fuzzer "Compile in clang fuzzing mode" 0)
+
+option(sctp_use_lwip "build with lwip" ON)
+option(sctp_use_rtos "build with rtos" ON)
+
+if(sctp_use_lwip)
+	add_definitions(-DSCTP_USE_LWIP)
+endif()
+
+if(sctp_use_rtos)
+	add_definitions(-DSCTP_USE_RTOS)
+endif()
+
 
 if (sctp_sanitizer_address AND sctp_sanitizer_memory)
 	message(FATAL_ERROR "Can not compile with both sanitizer options")
@@ -128,7 +142,9 @@ set(CMAKE_REQUIRED_INCLUDES "${CMAKE_CURRENT_SOURCE_DIR}/usrsctplib")
 
 check_include_file(usrsctp.h have_usrsctp_h)
 if (NOT have_usrsctp_h)
-	message(FATAL_ERROR "usrsctp.h not found")
+	if(NOT sctp_use_lwip)
+		message(FATAL_ERROR "usrsctp.h not found")
+	endif()
 endif ()
 
 check_struct_has_member("struct sockaddr" "sa_len" "sys/types.h;sys/socket.h" have_sa_len)
@@ -150,7 +166,7 @@ if (have_sin6_len)
 endif ()
 
 check_struct_has_member("struct sockaddr_conn" "sconn_len" "usrsctp.h" have_sconn_len)
-if (have_sconn_len)
+if (have_sconn_len OR sctp_use_lwip)
 	message(STATUS "HAVE_SCONN_LEN")
 	add_definitions(-DHAVE_SCONN_LEN)
 endif ()

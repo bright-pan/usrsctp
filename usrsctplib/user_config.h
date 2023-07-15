@@ -9,11 +9,11 @@
  * modification, are permitted provided that the following conditions are met:
  *
  * a) Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
+ *    this list of conditions and the following disclaimer.
  *
  * b) Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in
- *   the documentation and/or other materials provided with the distribution.
+ *    the documentation and/or other materials provided with the distribution.
  *
  * c) Neither the name of Cisco Systems, Inc. nor the names of its
  *    contributors may be used to endorse or promote products derived
@@ -34,61 +34,29 @@
 
 #if defined(__FreeBSD__) && !defined(__Userspace__)
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
+__FBSDID("$FreeBSD: head/sys/netinet/sctp_timer.h 359195 2020-03-21 16:12:19Z tuexen $");
 #endif
 
+#ifndef _NETINET_USER_CONFIG_H_
+#define _NETINET_USER_CONFIG_H_
 
-#ifndef __NETINET_SCTP_SHA1_H__
-#define __NETINET_SCTP_SHA1_H__
+#define SCTP_THREAD_DEFAULT_NAME "pthread"
+#define SCTP_THREAD_DEFAULT_SIZE 4096
+#define SCTP_THREAD_ADDR_MON_NAME "SCTP addr mon"
+#define SCTP_THREAD_ADDR_MON_SIZE SCTP_THREAD_DEFAULT_SIZE
+#define SCTP_THREAD_IPV4_RCV_NAME "SCTP/IP4"
+#define SCTP_THREAD_IPV4_RCV_SIZE SCTP_THREAD_DEFAULT_SIZE
+#define SCTP_THREAD_UDP_IPV4_RCV_NAME "SCTP/UDP/IP4"
+#define SCTP_THREAD_UDP_IPV4_RCV_SIZE SCTP_THREAD_DEFAULT_SIZE
+#define SCTP_THREAD_IPV6_RCV_NAME "SCTP/IP6"
+#define SCTP_THREAD_IPV6_RCV_SIZE SCTP_THREAD_DEFAULT_SIZE
+#define SCTP_THREAD_IPV6_RCV_NAME "SCTP/IP6"
+#define SCTP_THREAD_IPV6_RCV_SIZE SCTP_THREAD_DEFAULT_SIZE
+#define SCTP_THREAD_UDP_IPV6_RCV_NAME "SCTP/UDP/IP6"
+#define SCTP_THREAD_UDP_IPV6_SIZE SCTP_THREAD_DEFAULT_SIZE
+#define SCTP_THREAD_ITERATOR_NAME "SCTP iterator"
+#define SCTP_THREAD_ITERATOR_SIZE SCTP_THREAD_DEFAULT_SIZE
+#define SCTP_THREAD_TIMER_NAME "SCTP timer"
+#define SCTP_THREAD_TIMER_SIZE 8192//SCTP_THREAD_DEFAULT_SIZE
 
-#include <sys/types.h>
-#if defined(SCTP_USE_NSS_SHA1)
-#include <pk11pub.h>
-#elif defined(SCTP_USE_OPENSSL_SHA1)
-#include <openssl/sha.h>
-#elif defined(SCTP_USE_MBEDTLS_SHA1)
-#include <mbedtls/sha1.h>
-#endif
-
-struct sctp_sha1_context {
-#if defined(SCTP_USE_NSS_SHA1)
-	struct PK11Context *pk11_ctx;
-#elif defined(SCTP_USE_OPENSSL_SHA1)
-	SHA_CTX sha_ctx;
-#elif defined(SCTP_USE_MBEDTLS_SHA1)
-	mbedtls_sha1_context sha1_ctx;
-#else
-	unsigned int A;
-	unsigned int B;
-	unsigned int C;
-	unsigned int D;
-	unsigned int E;
-	unsigned int H0;
-	unsigned int H1;
-	unsigned int H2;
-	unsigned int H3;
-	unsigned int H4;
-	unsigned int words[80];
-	unsigned int TEMP;
-	/* block I am collecting to process */
-	char sha_block[64];
-	/* collected so far */
-	int how_many_in_block;
-	unsigned int running_total;
-#endif
-};
-
-#if (defined(__APPLE__)  && !defined(__Userspace__) && defined(KERNEL))
-#ifndef _KERNEL
-#define _KERNEL
-#endif
-#endif
-
-#if defined(_KERNEL) || defined(__Userspace__)
-
-void sctp_sha1_init(struct sctp_sha1_context *);
-void sctp_sha1_update(struct sctp_sha1_context *, const unsigned char *, unsigned int);
-void sctp_sha1_final(unsigned char *, struct sctp_sha1_context *);
-
-#endif
-#endif
+#endif//!< _NETINET_USER_CONFIG_H_

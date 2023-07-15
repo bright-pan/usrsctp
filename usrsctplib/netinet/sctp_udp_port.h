@@ -9,11 +9,11 @@
  * modification, are permitted provided that the following conditions are met:
  *
  * a) Redistributions of source code must retain the above copyright notice,
- *   this list of conditions and the following disclaimer.
+ *    this list of conditions and the following disclaimer.
  *
  * b) Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in
- *   the documentation and/or other materials provided with the distribution.
+ *    the documentation and/or other materials provided with the distribution.
  *
  * c) Neither the name of Cisco Systems, Inc. nor the names of its
  *    contributors may be used to endorse or promote products derived
@@ -34,61 +34,41 @@
 
 #if defined(__FreeBSD__) && !defined(__Userspace__)
 #include <sys/cdefs.h>
-__FBSDID("$FreeBSD$");
+__FBSDID("$FreeBSD: head/sys/netinet/sctp_timer.h 359195 2020-03-21 16:12:19Z tuexen $");
 #endif
 
+#ifndef _NETINET_SCTP_UDP_PORT_H_
+#define _NETINET_SCTP_UDP_PORT_H_
 
-#ifndef __NETINET_SCTP_SHA1_H__
-#define __NETINET_SCTP_SHA1_H__
+#if !defined(_WIN32)
+#if defined(INET) || defined(INET6)
+#if !defined(SCTP_USE_LWIP)
+#include <netinet/udp.h>
 
-#include <sys/types.h>
-#if defined(SCTP_USE_NSS_SHA1)
-#include <pk11pub.h>
-#elif defined(SCTP_USE_OPENSSL_SHA1)
-#include <openssl/sha.h>
-#elif defined(SCTP_USE_MBEDTLS_SHA1)
-#include <mbedtls/sha1.h>
-#endif
+#define STRUCT_UDP_HDR struct udphdr
+#define GET_UDP_SRC(udp) ((struct udphdr*)udp)->source
+#define GET_UDP_DEST(udp) ((struct udphdr*)udp)->dest
+#define GET_UDP_LEN(udp) ((struct udphdr*)udp)->len
+#define GET_UDP_CHKSUM(udp) ((struct udphdr*)udp)->check
 
-struct sctp_sha1_context {
-#if defined(SCTP_USE_NSS_SHA1)
-	struct PK11Context *pk11_ctx;
-#elif defined(SCTP_USE_OPENSSL_SHA1)
-	SHA_CTX sha_ctx;
-#elif defined(SCTP_USE_MBEDTLS_SHA1)
-	mbedtls_sha1_context sha1_ctx;
 #else
-	unsigned int A;
-	unsigned int B;
-	unsigned int C;
-	unsigned int D;
-	unsigned int E;
-	unsigned int H0;
-	unsigned int H1;
-	unsigned int H2;
-	unsigned int H3;
-	unsigned int H4;
-	unsigned int words[80];
-	unsigned int TEMP;
-	/* block I am collecting to process */
-	char sha_block[64];
-	/* collected so far */
-	int how_many_in_block;
-	unsigned int running_total;
-#endif
-};
+#include "lwip/udp.h"
+#define STRUCT_UDP_HDR struct udp_hdr
+#define GET_UDP_SRC(udp) ((struct udp_hdr*)udp)->src
+#define GET_UDP_DEST(udp) ((struct udp_hdr*)udp)->dest
+#define GET_UDP_LEN(udp) ((struct udp_hdr*)udp)->len
+#define GET_UDP_CHKSUM(udp) ((struct udp_hdr*)udp)->chksum
 
-#if (defined(__APPLE__)  && !defined(__Userspace__) && defined(KERNEL))
-#ifndef _KERNEL
-#define _KERNEL
-#endif
-#endif
-
-#if defined(_KERNEL) || defined(__Userspace__)
-
-void sctp_sha1_init(struct sctp_sha1_context *);
-void sctp_sha1_update(struct sctp_sha1_context *, const unsigned char *, unsigned int);
-void sctp_sha1_final(unsigned char *, struct sctp_sha1_context *);
+// #TBD
+#define UIO_MAXIOV 1024
+#define ERESTART        85  /* Interrupted system call should be restarted */
 
 #endif
 #endif
+#include <arpa/inet.h>
+#else
+#include <user_socketvar.h>
+#endif
+
+
+#endif//!< _NETINET_SCTP_UDP_PORT_H_

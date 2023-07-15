@@ -41,10 +41,12 @@
 #include <user_ip6_var.h>
 #endif
 #endif
+#include <user_config.h>
 #include <netinet/sctp_os.h>
 #include <netinet/sctp_var.h>
 #include <netinet/sctp_pcb.h>
 #include <netinet/sctp_input.h>
+#include <netinet/sctp_in_port.h>
 #if 0
 #if defined(__linux__)
 #include <linux/netlink.h>
@@ -143,7 +145,7 @@ recv_function_route(void *arg)
 	char rt_buffer[1024];
 	struct sockaddr *sa, *rti_info[RTAX_MAX];
 
-	sctp_userspace_set_threadname("SCTP addr mon");
+	sctp_userspace_set_threadname(SCTP_THREAD_ADDR_MON_NAME);
 
 	while (1) {
 		memset(rt_buffer, 0, sizeof(rt_buffer));
@@ -174,6 +176,7 @@ recv_function_route(void *arg)
 			}
 		}
 	}
+	pthread_exit(NULL);
 	return (NULL);
 }
 #endif
@@ -266,7 +269,7 @@ static void *
 recv_function_raw(void *arg)
 {
 	struct mbuf **recvmbuf;
-	struct ip *iphdr;
+	STRUCT_IP_HDR  *iphdr;
 	struct sctphdr *sh;
 	uint16_t port;
 	int offset, ecn = 0;
@@ -294,7 +297,7 @@ recv_function_raw(void *arg)
 	int want_ext = (iovlen > MLEN)? 1 : 0;
 	int want_header = 0;
 
-	sctp_userspace_set_threadname("SCTP/IP4 rcv");
+	sctp_userspace_set_threadname(SCTP_THREAD_IPV4_RCV_NAME);
 
 	memset(&src, 0, sizeof(struct sockaddr_in));
 	memset(&dst, 0, sizeof(struct sockaddr_in));
@@ -371,27 +374,28 @@ recv_function_raw(void *arg)
 			} while (ncounter > 0);
 		}
 
-		iphdr = mtod(recvmbuf[0], struct ip *);
-		sh = (struct sctphdr *)((caddr_t)iphdr + sizeof(struct ip));
+		iphdr = mtod(recvmbuf[0], STRUCT_IP_HDR *);
+		sh = (struct sctphdr *)((caddr_t)iphdr + sizeof(STRUCT_IP_HDR));
 		ch = (struct sctp_chunkhdr *)((caddr_t)sh + sizeof(struct sctphdr));
-		offset = sizeof(struct ip) + sizeof(struct sctphdr);
+		offset = sizeof(STRUCT_IP_HDR) + sizeof(struct sctphdr);
 
-		if (iphdr->ip_tos != 0) {
-			ecn = iphdr->ip_tos & 0x02;
+
+		if (GET_IP_TOS(iphdr) != 0) {
+			ecn = GET_IP_TOS(iphdr) & 0x02;
 		}
 
 		dst.sin_family = AF_INET;
 #ifdef HAVE_SIN_LEN
 		dst.sin_len = sizeof(struct sockaddr_in);
 #endif
-		dst.sin_addr = iphdr->ip_dst;
+		dst.sin_addr.s_addr = GET_IP_DEST_ADDR(iphdr);
 		dst.sin_port = sh->dest_port;
 
 		src.sin_family = AF_INET;
 #ifdef HAVE_SIN_LEN
 		src.sin_len = sizeof(struct sockaddr_in);
 #endif
-		src.sin_addr = iphdr->ip_src;
+		src.sin_addr.s_addr = GET_IP_SRC_ADDR(iphdr);
 		src.sin_port = sh->src_port;
 
 		/* SCTP does not allow broadcasts or multicasts */
@@ -417,7 +421,7 @@ recv_function_raw(void *arg)
 		}
 		SCTPDBG(SCTP_DEBUG_USR, "%s: Received %d bytes.", __func__, n);
 		SCTPDBG(SCTP_DEBUG_USR, " - calling sctp_common_input_processing with off=%d\n", offset);
-		sctp_common_input_processing(&recvmbuf[0], sizeof(struct ip), offset, n,
+		sctp_common_input_processing(&recvmbuf[0], sizeof(STRUCT_IP_HDR), offset, n,
 		                             (struct sockaddr *)&src,
 		                             (struct sockaddr *)&dst,
 		                             sh, ch,
@@ -434,6 +438,7 @@ recv_function_raw(void *arg)
 	/* free the array itself */
 	free(recvmbuf);
 	SCTPDBG(SCTP_DEBUG_USR, "%s: Exiting SCTP/IP4 rcv\n", __func__);
+	pthread_exit(NULL);
 	return (NULL);
 }
 #endif
@@ -474,7 +479,7 @@ recv_function_raw6(void *arg)
 	int want_ext = (iovlen > MLEN)? 1 : 0;
 	int want_header = 0;
 
-	sctp_userspace_set_threadname("SCTP/IP6 rcv");
+	sctp_userspace_set_threadname(SCTP_THREAD_IPV6_RCV_NAME);
 
 	recvmbuf6 = malloc(sizeof(struct mbuf *) * MAXLEN_MBUF_CHAIN);
 
@@ -620,6 +625,7 @@ recv_function_raw6(void *arg)
 	/* free the array itself */
 	free(recvmbuf6);
 	SCTPDBG(SCTP_DEBUG_USR, "%s: Exiting SCTP/IP6 rcv\n", __func__);
+	pthread_exit(NULL);
 	return (NULL);
 }
 #endif
@@ -663,7 +669,7 @@ recv_function_udp(void *arg)
 	DWORD ncounter;
 #endif
 
-	sctp_userspace_set_threadname("SCTP/UDP/IP4 rcv");
+	sctp_userspace_set_threadname(SCTP_THREAD_UDP_IPV4_RCV_NAME);
 
 	udprecvmbuf = malloc(sizeof(struct mbuf *) * MAXLEN_MBUF_CHAIN);
 
@@ -826,6 +832,7 @@ recv_function_udp(void *arg)
 	/* free the array itself */
 	free(udprecvmbuf);
 	SCTPDBG(SCTP_DEBUG_USR, "%s: Exiting SCTP/UDP/IP4 rcv\n", __func__);
+	pthread_exit(NULL);
 	return (NULL);
 }
 #endif
@@ -865,7 +872,7 @@ recv_function_udp6(void *arg)
 	DWORD ncounter;
 #endif
 
-	sctp_userspace_set_threadname("SCTP/UDP/IP6 rcv");
+	sctp_userspace_set_threadname(SCTP_THREAD_UDP_IPV6_RCV_NAME);
 
 	udprecvmbuf6 = malloc(sizeof(struct mbuf *) * MAXLEN_MBUF_CHAIN);
 	while (1) {
@@ -1014,6 +1021,7 @@ recv_function_udp6(void *arg)
 	/* free the array itself */
 	free(udprecvmbuf6);
 	SCTPDBG(SCTP_DEBUG_USR, "%s: Exiting SCTP/UDP/IP6 rcv\n", __func__);
+	pthread_exit(NULL);
 	return (NULL);
 }
 #endif
@@ -1053,6 +1061,9 @@ setSendBufferSize(int sfd, int new_size)
 		SCTPDBG(SCTP_DEBUG_USR, "Can't set send-buffers size (errno = %d).\n", WSAGetLastError());
 #else
 		SCTPDBG(SCTP_DEBUG_USR, "Can't set send-buffers size (errno = %d).\n", errno);
+#endif
+#if defined(SCTP_USE_LWIP)
+		SCTP_PRINTF("lwIP does not support this socket option(SO_SNDBUF:%d), so you need to control this by yourself.", new_size);
 #endif
 	}
 	return;
@@ -1386,7 +1397,7 @@ recv_thread_init(void)
 	if (SCTP_BASE_VAR(userspace_route) != -1) {
 		int rc;
 
-		if ((rc = sctp_userspace_thread_create(&SCTP_BASE_VAR(recvthreadroute), &recv_function_route))) {
+		if ((rc = sctp_userspace_thread_create(&SCTP_BASE_VAR(recvthreadroute), &recv_function_route, SCTP_THREAD_ADDR_MON_NAME, SCTP_THREAD_ADDR_MON_SIZE))) {
 			SCTPDBG(SCTP_DEBUG_USR, "Can't start routing thread (%d).\n", rc);
 			close(SCTP_BASE_VAR(userspace_route));
 			SCTP_BASE_VAR(userspace_route) = -1;
@@ -1398,7 +1409,7 @@ recv_thread_init(void)
 	if (SCTP_BASE_VAR(userspace_rawsctp) != -1) {
 		int rc;
 
-		if ((rc = sctp_userspace_thread_create(&SCTP_BASE_VAR(recvthreadraw), &recv_function_raw))) {
+		if ((rc = sctp_userspace_thread_create(&SCTP_BASE_VAR(recvthreadraw), &recv_function_raw, SCTP_THREAD_IPV4_RCV_NAME, SCTP_THREAD_IPV4_RCV_SIZE))) {
 			SCTPDBG(SCTP_DEBUG_USR, "Can't start SCTP/IPv4 recv thread (%d).\n", rc);
 #if defined(_WIN32)
 			closesocket(SCTP_BASE_VAR(userspace_rawsctp));
@@ -1411,7 +1422,7 @@ recv_thread_init(void)
 	if (SCTP_BASE_VAR(userspace_udpsctp) != -1) {
 		int rc;
 
-		if ((rc = sctp_userspace_thread_create(&SCTP_BASE_VAR(recvthreadudp), &recv_function_udp))) {
+		if ((rc = sctp_userspace_thread_create(&SCTP_BASE_VAR(recvthreadudp), &recv_function_udp, SCTP_THREAD_UDP_IPV4_RCV_NAME, SCTP_THREAD_UDP_IPV4_RCV_SIZE))) {
 			SCTPDBG(SCTP_DEBUG_USR, "Can't start SCTP/UDP/IPv4 recv thread (%d).\n", rc);
 #if defined(_WIN32)
 			closesocket(SCTP_BASE_VAR(userspace_udpsctp));
@@ -1426,7 +1437,7 @@ recv_thread_init(void)
 	if (SCTP_BASE_VAR(userspace_rawsctp6) != -1) {
 		int rc;
 
-		if ((rc = sctp_userspace_thread_create(&SCTP_BASE_VAR(recvthreadraw6), &recv_function_raw6))) {
+		if ((rc = sctp_userspace_thread_create(&SCTP_BASE_VAR(recvthreadraw6), &recv_function_raw6, SCTP_THREAD_IPV6_RCV_NAME, SCTP_THREAD_IPV6_RCV_SIZE))) {
 			SCTPDBG(SCTP_DEBUG_USR, "Can't start SCTP/IPv6 recv thread (%d).\n", rc);
 #if defined(_WIN32)
 			closesocket(SCTP_BASE_VAR(userspace_rawsctp6));
@@ -1439,7 +1450,7 @@ recv_thread_init(void)
 	if (SCTP_BASE_VAR(userspace_udpsctp6) != -1) {
 		int rc;
 
-		if ((rc = sctp_userspace_thread_create(&SCTP_BASE_VAR(recvthreadudp6), &recv_function_udp6))) {
+		if ((rc = sctp_userspace_thread_create(&SCTP_BASE_VAR(recvthreadudp6), &recv_function_udp6, SCTP_THREAD_UDP_IPV6_RCV_NAME, SCTP_THREAD_UDP_IPV6_SIZE))) {
 			SCTPDBG(SCTP_DEBUG_USR, "Can't start SCTP/UDP/IPv6 recv thread (%d).\n", rc);
 #if defined(_WIN32)
 			closesocket(SCTP_BASE_VAR(userspace_udpsctp6));

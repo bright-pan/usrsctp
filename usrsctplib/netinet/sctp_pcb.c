@@ -51,16 +51,16 @@ __FBSDID("$FreeBSD: head/sys/netinet/sctp_pcb.c 363323 2020-07-19 12:34:19Z tuex
 #include <netinet/sctp_output.h>
 #include <netinet/sctp_timer.h>
 #include <netinet/sctp_bsd_addr.h>
-#if defined(INET) || defined(INET6)
-#if !defined(_WIN32)
-#include <netinet/udp.h>
-#endif
-#endif
+#include <netinet/sctp_udp_port.h>
+#include <netinet/sctp_in_port.h>
+
 #ifdef INET6
 #if defined(__Userspace__)
 #include "user_ip6_var.h"
 #else
+#if !defined(SCTP_USE_LWIP)
 #include <netinet6/ip6_var.h>
+#endif
 #endif
 #endif
 #if defined(__FreeBSD__) && !defined(__Userspace__)
@@ -612,7 +612,11 @@ sctp_add_addr_to_vrf(uint32_t vrf_id, void *ifn, uint32_t ifn_index,
 		if (if_name != NULL) {
 			SCTP_SNPRINTF(sctp_ifnp->ifn_name, SCTP_IFNAMSIZ, "%s", if_name);
 		} else {
+			#if defined(SCTP_USE_LWIP)
+			SCTP_SNPRINTF(sctp_ifnp->ifn_name, SCTP_IFNAMSIZ, "%s", "na");
+			#else
 			SCTP_SNPRINTF(sctp_ifnp->ifn_name, SCTP_IFNAMSIZ, "%s", "unknown");
+			#endif
 		}
 		hash_ifn_head = &SCTP_BASE_INFO(vrf_ifn_hash)[(ifn_index & SCTP_BASE_INFO(vrf_ifn_hashmark))];
 		LIST_INIT(&sctp_ifnp->ifalist);
@@ -4624,7 +4628,7 @@ sctp_add_remote_addr(struct sctp_tcb *stcb, struct sockaddr *newaddr,
 			}
 #if defined(INET) || defined(INET6)
 			if (net->port) {
-				net->mtu += (uint32_t)sizeof(struct udphdr);
+				net->mtu += (uint32_t)sizeof(STRUCT_UDP_HDR);
 			}
 #endif
 		} else if (net->ro._s_addr != NULL) {
@@ -4680,7 +4684,7 @@ sctp_add_remote_addr(struct sctp_tcb *stcb, struct sockaddr *newaddr,
 			}
 #if defined(INET) || defined(INET6)
 			if (net->port) {
-				net->mtu += (uint32_t)sizeof(struct udphdr);
+				net->mtu += (uint32_t)sizeof(STRUCT_UDP_HDR);
 			}
 #endif
 		} else {
@@ -4707,7 +4711,7 @@ sctp_add_remote_addr(struct sctp_tcb *stcb, struct sockaddr *newaddr,
 	}
 #if defined(INET) || defined(INET6)
 	if (net->port) {
-		net->mtu -= (uint32_t)sizeof(struct udphdr);
+		net->mtu -= (uint32_t)sizeof(STRUCT_UDP_HDR);
 	}
 #endif
 	if (from == SCTP_ALLOC_ASOC) {
@@ -6490,7 +6494,7 @@ sctp_startup_mcore_threads(void)
 static struct mbuf *
 sctp_netisr_hdlr(struct mbuf *m, uintptr_t source)
 {
-	struct ip *ip;
+	STRUCT_IP_HDR *ip;
 	struct sctphdr *sh;
 	int offset;
 	uint32_t flowid, tag;
@@ -6499,16 +6503,16 @@ sctp_netisr_hdlr(struct mbuf *m, uintptr_t source)
 	 * No flow id built by lower layers fix it so we
 	 * create one.
 	 */
-	ip = mtod(m, struct ip *);
-	offset = (ip->ip_hl << 2) + sizeof(struct sctphdr);
+	ip = mtod(m, STRUCT_IP_HDR *);
+	offset = GET_IP_HDR_LEN_VAL(ip) + sizeof(struct sctphdr);
 	if (SCTP_BUF_LEN(m) < offset) {
 		if ((m = m_pullup(m, offset)) == NULL) {
 			SCTP_STAT_INCR(sctps_hdrops);
 			return (NULL);
 		}
-		ip = mtod(m, struct ip *);
+		ip = mtod(m, STRUCT_IP_HDR *);
 	}
-	sh = (struct sctphdr *)((caddr_t)ip + (ip->ip_hl << 2));
+	sh = (struct sctphdr *)((caddr_t)ip + (GET_IP_HDR_LEN_VAL(ip) << 2));
 	tag = htonl(sh->v_tag);
 	flowid = tag ^ ntohs(sh->dest_port) ^ ntohs(sh->src_port);
 	m->m_pkthdr.flowid = flowid;

@@ -45,7 +45,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#if !defined(SCTP_USE_LWIP)
 #include <errno.h>
+#else
+#include "lwip/errno.h"
+#endif
 #include <user_atomic.h>
 #include <netinet/sctp_sysctl.h>
 #include <netinet/sctp_pcb.h>
@@ -54,6 +58,7 @@
 #include <netinet/sctp_callout.h>
 #include <netinet/sctp_pcb.h>
 #endif
+#include <user_config.h>
 #include <netinet/sctputil.h>
 
 /*
@@ -195,10 +200,12 @@ sctp_timeout(void *arg SCTP_UNUSED)
 void *
 user_sctp_timer_iterate(void *arg)
 {
-	sctp_userspace_set_threadname("SCTP timer");
+	sctp_userspace_set_threadname(SCTP_THREAD_TIMER_NAME);
 	for (;;) {
 #if defined(_WIN32)
 		Sleep(TIMEOUT_INTERVAL);
+#elif defined(SCTP_USE_LWIP)
+		usleep(TIMEOUT_INTERVAL*1000);
 #else
 		struct timespec amount, remaining;
 
@@ -213,6 +220,7 @@ user_sctp_timer_iterate(void *arg)
 		}
 		sctp_handle_tick(sctp_msecs_to_ticks(TIMEOUT_INTERVAL));
 	}
+	pthread_exit(NULL);
 	return (NULL);
 }
 
@@ -225,7 +233,7 @@ sctp_start_timer_thread(void)
 	 */
 	int rc;
 
-	rc = sctp_userspace_thread_create(&SCTP_BASE_VAR(timer_thread), user_sctp_timer_iterate);
+	rc = sctp_userspace_thread_create(&SCTP_BASE_VAR(timer_thread), user_sctp_timer_iterate, SCTP_THREAD_TIMER_NAME, SCTP_THREAD_TIMER_SIZE);
 	if (rc) {
 		SCTP_PRINTF("ERROR; return code from sctp_thread_create() is %d\n", rc);
 	} else {
