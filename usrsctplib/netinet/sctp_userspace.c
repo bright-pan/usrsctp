@@ -35,6 +35,12 @@
 #pragma comment(lib, "iphlpapi.lib")
 #endif
 #endif
+#include <user_config.h>
+
+#if defined(SCTP_USE_RTOS)
+#include <netinet/sctp_pcb.h>
+#include "esp_pthread.h"
+#endif
 #include <netinet/sctp_os_userspace.h>
 #if defined(__FreeBSD__)
 #include <pthread_np.h>
@@ -59,7 +65,7 @@ sctp_create_thread_adapter(void *arg) {
 }
 
 int
-sctp_userspace_thread_create(userland_thread_t *thread, start_routine_t start_routine)
+sctp_userspace_thread_create(userland_thread_t *thread, start_routine_t start_routine, const char* thread_name, uint32_t thread_size)
 {
 	*thread = CreateThread(NULL, 0, sctp_create_thread_adapter,
 			       (void *)start_routine, 0, NULL);
@@ -72,9 +78,58 @@ sctp_userspace_thread_create(userland_thread_t *thread, start_routine_t start_ro
 #pragma GCC diagnostic pop
 #endif
 
+#elif defined(SCTP_USE_RTOS)
+#include "esp_pthread.h"
+
+int
+sctp_userspace_thread_create(userland_thread_t *thread, start_routine_t start_routine, const char* thread_name, uint32_t thread_size)
+{
+    esp_pthread_cfg_t pthread_cfg;
+    esp_err_t esp_err = esp_pthread_get_cfg(&pthread_cfg);
+    pthread_attr_t *pAttr = NULL;
+    pthread_attr_t attr;
+    pAttr = &attr;
+	int result = 0;
+
+    result = pthread_attr_init(pAttr);
+	extern struct sctp_base_info system_base_info;
+    if(esp_err != ESP_OK){
+        SCTPDBG(SCTP_DEBUG_USR, "get the esp pthread cfg failed.\n");
+		//SCTP_PRINTF("get the esp pthread cfg failed.\n");
+		return esp_err;
+    }
+
+    if(thread_size == 0){
+        pthread_cfg.stack_size = SCTP_THREAD_DEFAULT_SIZE;
+    }else{
+        pthread_cfg.stack_size = thread_size;
+    }
+
+    if(thread_name == NULL){
+        pthread_cfg.thread_name = SCTP_THREAD_DEFAULT_NAME;
+    }else{
+        pthread_cfg.thread_name = thread_name;
+    }
+
+    esp_err = esp_pthread_set_cfg(&pthread_cfg);
+
+    if(esp_err != ESP_OK){
+		SCTPDBG(SCTP_DEBUG_USR, "set the esp pthread cfg failed.\n");
+		//SCTP_PRINTF("set the esp pthread cfg failed.\n");
+		return esp_err;
+    }
+
+    if(thread_size == 0){
+        pthread_attr_setstacksize(pAttr, SCTP_THREAD_DEFAULT_SIZE);
+    }else{
+        pthread_attr_setstacksize(pAttr, thread_size);
+    }
+
+	return pthread_create(thread, pAttr, start_routine, NULL);
+}
 #else
 int
-sctp_userspace_thread_create(userland_thread_t *thread, start_routine_t start_routine)
+sctp_userspace_thread_create(userland_thread_t *thread, start_routine_t start_routine, const char* thread_name, uint32_t thread_size)
 {
 	return pthread_create(thread, NULL, start_routine, NULL);
 }
@@ -98,6 +153,13 @@ sctp_userspace_set_threadname(const char *name)
 int
 sctp_userspace_get_mtu_from_ifn(uint32_t if_index)
 {
+#if defined(SCTP_USE_LWIP)
+	struct netif* net_if = netif_get_by_index(if_index);
+	if(net_if != NULL){
+		return net_if->mtu;
+	}
+	return 0;
+#else //SCTP_USE_LWIP
 #if defined(INET) || defined(INET6)
 	struct ifreq ifr;
 	int fd;
@@ -126,6 +188,7 @@ sctp_userspace_get_mtu_from_ifn(uint32_t if_index)
 #endif
 	}
 	return (mtu);
+#endif //SCTP_USE_LWIP
 }
 #endif
 
